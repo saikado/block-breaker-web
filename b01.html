@@ -48,7 +48,7 @@ try{
  const matGlass=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide});
  const material={wall:matWall,roof:matRoof,rib:matRib,door:matDoor,glass:matGlass};
  const geometry={wall:cube,roof:cube,rib:cube,door:plane,glass:plane};
- let meshes=[],floorCount=1,lod='full',quantity=1,light=true,az=.48,polar=1.05,radius=10;
+ let meshes=[],floorCount=1,lod='full',quantity=1,light=true,az=Math.PI+.48,polar=1.05,radius=10;
  const target=new THREE.Vector3(0,1.0,0);const helper=new THREE.Object3D();
  function color(rgb,factor=1){return new THREE.Color().setRGB(Math.min(1,rgb[0]*factor),Math.min(1,rgb[1]*factor),Math.min(1,rgb[2]*factor),THREE.LinearSRGBColorSpace)}
  function moveCamera(){camera.position.set(target.x+radius*Math.sin(polar)*Math.sin(az),target.y+radius*Math.cos(polar),target.z+radius*Math.sin(polar)*Math.cos(az));camera.lookAt(target)}
@@ -128,7 +128,7 @@ try{
    $('floors').textContent=floorCount+'階';$('lod').textContent=lod.toUpperCase();
    $('quantity').textContent=quantity+'棟';$('lights').textContent='窓: '+(light?'点灯':'消灯');
  }
- function reset(){az=.48;polar=1.05;radius=quantity===1?10:50;target.y=floorCount===1?1:1.6;moveCamera()}
+ function reset(){az=Math.PI+.48;polar=1.05;radius=quantity===1?10:50;target.y=floorCount===1?1:1.6;moveCamera()}
  $('floors').onclick=()=>{floorCount=floorCount===1?2:1;rebuild();reset()};
  $('lod').onclick=()=>{lod=lod==='full'?'light':lod==='light'?'silhouette':'full';rebuild()};
  $('quantity').onclick=()=>{quantity=quantity===1?100:1;rebuild();reset()};
