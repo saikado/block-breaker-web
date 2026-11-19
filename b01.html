@@ -120,7 +120,7 @@ try{
      mesh.frustumCulled=false;
      entries.forEach((e,i)=>{
        helper.position.set(e.x,e.y,e.z);helper.scale.set(e.sx,e.sy,e.sz);helper.rotation.set(e.rotX,e.rotY,0);
-       helper.updateMatrix();mesh.setMatrixAt(i,helper.matrix);mesh.setColorAt(i,e.hex);
+       helper.updateMatrix();mesh.setMatrixAt(i,helper.matrix);mesh.setColorAt(i,new THREE.Color(e.hex));
      });
      mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;
      scene.add(mesh);meshes.push(mesh);
