@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>B03 Building Viewer | Block Breaker Web</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111e30;color:#f2f6ff;font:13px -apple-system,BlinkMacSystemFont,sans-serif}canvas{display:block;touch-action:none}
+#hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:12px;right:12px;padding:11px 12px;background:#0a1425e8;border:1px solid #66768daa;border-radius:12px;pointer-events:none;line-height:1.65}#hud strong{font-size:15px}
+#buttons{position:fixed;bottom:max(14px,env(safe-area-inset-bottom));left:8px;right:8px;display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+button,a{background:#1a3253;border:1px solid #8396b2;border-radius:11px;color:#fff;padding:11px 12px;text-decoration:none;font:600 12px -apple-system,sans-serif}
+#error{position:fixed;top:45%;left:12px;right:12px;text-align:center;color:#ffc7c7;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="hud"><strong>B03 / 集合住宅ビューワ</strong><div id="stats">B03 JSONを読み込み中...</div><div id="detail">3階 / FULL / 窓点灯</div><div>1本指: 回転 / 2本指: ズーム</div></div>
+<div id="error"></div>
+<div id="buttons"><button id="lod">FULL</button><button id="qty">1棟</button><button id="light">窓: 点灯</button><button id="balcony">ベランダ: ON</button><button id="reset">視点リセット</button><a href="./b01.html">B01へ</a></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+const el=id=>document.getElementById(id);
+try {
+ const response=await fetch('./data/B03.json',{cache:'no-store'});
+ if(!response.ok)throw Error('data/B03.json HTTP '+response.status);
+ const cfg=await response.json();
+ if(cfg.format!=='block_breaker_building_design'||cfg.id!=='B03'||cfg.version!==1)throw Error('対応していない建物定義');
+ const g=cfg.geometry,f=cfg.facade,wnd=cfg.windows,b=cfg.balcony,roof=cfg.roof,ent=cfg.entrance;
+ const width=g.default_width,depth=g.default_depth,fh=g.floor_height,floors=g.floors,height=fh*floors;
+ const scene=new THREE.Scene();scene.background=new THREE.Color(0x16243a);scene.fog=new THREE.FogExp2(0x16243a,.011);
+ const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,400);
+ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+ renderer.setPixelRatio(Math.min(2,devicePixelRatio));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(renderer.domElement);
+ scene.add(new THREE.HemisphereLight(0xbad5ff,0x29313a,1.95));
+ const sun=new THREE.DirectionalLight(0xffe4c3,2.0);sun.position.set(-10,20,-14);scene.add(sun);
+ const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:0x2d394a,roughness:1}));
+ ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
+ const grid=new THREE.GridHelper(200,60,0x4b5872,0x354056);grid.position.y=-.035;scene.add(grid);
+ const box=new THREE.BoxGeometry(1,1,1),plane=new THREE.PlaneGeometry(1,1);
+ // Shared chamfered profile with B01: a single geometry for all instances.
+ const ch=Math.max(0,Math.min(g.chamfer/width,.12));
+ const outline=new THREE.Shape();
+ [[-.5+ch,-.5],[.5-ch,-.5],[.5,-.5+ch],[.5,.5-ch],[.5-ch,.5],[-.5+ch,.5],[-.5,.5-ch],[-.5,-.5+ch]].forEach(([x,y],i)=>i?outline.lineTo(x,y):outline.moveTo(x,y));
+ outline.closePath();
+ const bodyGeo=new THREE.ExtrudeGeometry(outline,{depth:1,bevelEnabled:false,steps:1});bodyGeo.translate(0,0,-.5);bodyGeo.computeVertexNormals();
+ function makeTexture(paint){
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const ctx=canvas.getContext('2d');paint(ctx);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;return t;
+ }
+ const shade=makeTexture(ctx=>{
+  const a=ctx.createLinearGradient(0,0,0,64);a.addColorStop(0,'rgba(35,42,47,.58)');a.addColorStop(.23,'rgba(65,69,68,.13)');a.addColorStop(.45,'rgba(65,69,68,0)');ctx.fillStyle=a;ctx.fillRect(0,0,64,64);
+  const r=ctx.createLinearGradient(0,0,64,0);r.addColorStop(0,'rgba(60,65,69,0)');r.addColorStop(.76,'rgba(60,65,69,0)');r.addColorStop(1,'rgba(35,42,47,.46)');ctx.fillStyle=r;ctx.fillRect(0,0,64,64);
+ });
+ const halo=makeTexture(ctx=>{
+  const a=ctx.createRadialGradient(32,32,4,32,32,31);a.addColorStop(0,'rgba(255,220,151,.43)');a.addColorStop(.46,'rgba(255,196,102,.23)');a.addColorStop(1,'rgba(255,160,72,0)');ctx.fillStyle=a;ctx.fillRect(0,0,64,64);
+ });
+ const mats={
+  body:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.82}),
+  concrete:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.89}),
+  metal:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.72,metalness:.16}),
+  window:new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide}),
+  shade:new THREE.MeshBasicMaterial({map:shade,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1}),
+  glow:new THREE.MeshBasicMaterial({map:halo,transparent:true,depthWrite:false,opacity:.78,blending:THREE.AdditiveBlending,side:THREE.DoubleSide})
+ };
+ const geos={body:bodyGeo,concrete:box,metal:box,window:plane,shade:plane,glow:plane};
+ const temp=new THREE.Object3D(),target=new THREE.Vector3(0,height*.5,0);
+ let meshes=[],quantity=1,lod='full',lights=true,showBalcony=true,az=Math.PI+.48,polar=1.08,radius=11;
+ function hex(array){return new THREE.Color().setRGB(...array,THREE.LinearSRGBColorSpace).getHex()}
+ const C={wall:hex(f.base_color),roof:hex(f.top_color),edge:hex(f.side_color),foundation:hex(f.foundation_color),band:hex(f.floor_band_color),slab:hex(f.balcony_color),rail:hex(b.rail_color),door:hex(ent.door_color),frame:hex(ent.frame_color),canopy:hex(ent.canopy_color),lit:hex(wnd.glass_color),dark:hex(wnd.side_glass_color)};
+ const groups=()=>({body:[],concrete:[],metal:[],window:[],shade:[],glow:[]});
+ function add(bucket,type,x,y,z,sx,sy,sz,tint,ry=0){bucket[type].push([x,y,z,sx,sy,sz,tint,ry])}
+ function build(bucket,x,z,seed){
+  const front=z-depth*.5;
+  // The JSON color and the same three-floor proportions as Pythonista BView.
+  add(bucket,'body',x,height*.5,z,width,height,depth,C.wall);
+  add(bucket,'concrete',x,.05,front-.016,width+.02,.1,.045,C.foundation);
+  add(bucket,'concrete',x,height+roof.thickness*.5,z,width+roof.overhang*2,roof.thickness,depth+roof.overhang*2,C.roof);
+  add(bucket,'concrete',x,height+roof.thickness*.5,front-roof.overhang,width+roof.overhang*2,roof.thickness,.026,C.edge);
+  if(lod==='silhouette')return;
+  for(let floor=1;floor<floors;floor++){
+   const yy=fh*floor;
+   add(bucket,'concrete',x,yy,front-.03,width+.045,b.floor_band_height,.06,C.band);
+   if(showBalcony&&b.enabled){
+    // The balcony slab projects out from the facade; rail spans the front edge.
+    const slabY=yy-.045,slabZ=front-b.depth;
+    add(bucket,'concrete',x,slabY,slabZ,width,b.slab_height,b.depth*2,C.slab);
+    if(lod==='full'){
+     const railY=slabY+b.slab_height*.5+b.rail_height;
+     add(bucket,'metal',x,railY,slabZ-b.depth,width,.026,.027,C.rail);
+     // Short side posts keep the rail visibly supported, without hundreds of meshes.
+     add(bucket,'metal',x-width*.47,railY-b.rail_height*.5,slabZ-b.depth,.028,b.rail_height,.028,C.rail);
+     add(bucket,'metal',x+width*.47,railY-b.rail_height*.5,slabZ-b.depth,.028,b.rail_height,.028,C.rail);
+    }
+   }
+  }
+  const doorW=width*ent.width_ratio,doorH=fh*ent.height_ratio,doorY=.03+doorH*.5;
+  if(ent.enabled){
+   add(bucket,'window',x,doorY,front-.026,doorW+.08,doorH+.06,1,C.frame,Math.PI);
+   add(bucket,'window',x,doorY,front-.031,doorW,doorH,1,C.door,Math.PI);
+   add(bucket,'concrete',x,doorH-.015,front-ent.canopy_depth*.5,doorW*ent.canopy_width_ratio,ent.canopy_height,ent.canopy_depth,C.canopy);
+   const steps=cfg.steps;
+   if(steps?.enabled)for(let i=0;i<steps.count;i++){
+    add(bucket,'concrete',x,(i+.5)*steps.height,front-.12-i*steps.depth,doorW*ent.canopy_width_ratio*(.88-i*.06),steps.height,steps.depth,C.band);
+   }
+  }
+  const ww=width*wnd.width_ratio,wh=fh*wnd.height_ratio;
+  let n=0;
+  function glass(wx,wy,wz,sw,sh,side=false,lit=false){
+   const ry=side?Math.PI/2:Math.PI,tint=side?C.dark:(lit?C.lit:C.dark);
+   add(bucket,'window',wx,wy,wz,sw,sh,1,tint,ry);
+   if(lod==='full'&&!side){
+    add(bucket,'shade',wx,wy,wz-.003,sw,sh,1,0xffffff,ry);
+    if(lit)add(bucket,'glow',wx,wy,wz-.022,sw*1.75,sh*1.75,1,0xffdfb8,ry);
+   }
+  }
+  for(let floor=0;floor<floors;floor++){
+   if(lod==='light'&&floor===0)continue;
+   const yy=floor*fh+fh*wnd.y_ratio;
+   for(let col=0;col<wnd.front_count;col++){
+    const xx=x+(col-(wnd.front_count-1)/2)*width*.275;
+    const lit=lights&&((seed*29+floor*17+col*7)%10)<7;
+    glass(xx,yy,front-.042,ww,wh,false,lit);
+   }
+  }
+  if(lod==='full'){
+   const sw=ww*wnd.side_width_ratio,sh=wh*wnd.side_height_ratio;
+   for(let floor=0;floor<floors;floor++)glass(x+width*.5+.028,floor*fh+fh*wnd.y_ratio,z,sw,sh,true,false);
+  }
+ }
+ function rebuild(){
+  for(const m of meshes){scene.remove(m);m.dispose()}meshes=[];
+  const buckets=groups(),side=Math.ceil(Math.sqrt(quantity));
+  for(let i=0;i<quantity;i++){
+   const row=Math.floor(i/side),col=i%side;
+   build(buckets,(col-(side-1)/2)*4.6,(row-(side-1)/2)*4.6,i);
+  }
+  for(const [type,items] of Object.entries(buckets)){
+   if(!items.length)continue;
+   const mesh=new THREE.InstancedMesh(geos[type],mats[type],items.length);
+   mesh.frustumCulled=false;if(type==='shade'||type==='glow')mesh.renderOrder=type==='shade'?2:3;
+   items.forEach((item,i)=>{
+    const [x,y,z,sx,sy,sz,tint,ry]=item;temp.position.set(x,y,z);temp.rotation.set(0,ry,0);temp.scale.set(sx,sy,sz);temp.updateMatrix();
+    mesh.setMatrixAt(i,temp.matrix);mesh.setColorAt(i,new THREE.Color(tint));
+   });
+   mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;
+   scene.add(mesh);meshes.push(mesh);
+  }
+  el('lod').textContent=lod.toUpperCase();el('qty').textContent=quantity+'棟';
+  el('light').textContent='窓: '+(lights?'点灯':'消灯');el('balcony').textContent='ベランダ: '+(showBalcony?'ON':'OFF');
+ }
+ function view(){camera.position.set(target.x+radius*Math.sin(polar)*Math.sin(az),target.y+radius*Math.cos(polar),target.z+radius*Math.sin(polar)*Math.cos(az));camera.lookAt(target)}
+ function reset(){az=Math.PI+.48;polar=1.08;radius=quantity===1?11:50;view()}
+ el('lod').onclick=()=>{lod=lod==='full'?'light':lod==='light'?'silhouette':'full';rebuild()};
+ el('qty').onclick=()=>{quantity=quantity===1?100:1;rebuild();reset()};
+ el('light').onclick=()=>{lights=!lights;rebuild()};
+ el('balcony').onclick=()=>{showBalcony=!showBalcony;rebuild()};
+ el('reset').onclick=reset;
+ const pointers=new Map();let prevDist=0;
+ renderer.domElement.addEventListener('pointerdown',e=>{renderer.domElement.setPointerCapture(e.pointerId);pointers.set(e.pointerId,[e.clientX,e.clientY]);prevDist=0});
+ renderer.domElement.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;
+  const prev=pointers.get(e.pointerId);
+  if(pointers.size===1){az-=(e.clientX-prev[0])*.008;polar=Math.max(.2,Math.min(1.48,polar+(e.clientY-prev[1])*.008))}
+  pointers.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pointers.size===2){const pts=[...pointers.values()],dist=Math.hypot(pts[0][0]-pts[1][0],pts[0][1]-pts[1][1]);if(prevDist)radius=Math.max(4,Math.min(170,radius*prevDist/dist));prevDist=dist}
+  view();
+ });
+ const end=e=>{pointers.delete(e.pointerId);prevDist=0};
+ renderer.domElement.addEventListener('pointerup',end);renderer.domElement.addEventListener('pointercancel',end);
+ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+ rebuild();reset();let frames=0,last=performance.now();
+ function frame(now){requestAnimationFrame(frame);renderer.render(scene,camera);frames++;
+  if(now-last>700){el('stats').textContent=Math.round(frames*1000/(now-last))+' FPS / '+quantity+' buildings / '+renderer.info.render.calls+' draw calls';frames=0;last=now;el('detail').textContent='B03 JSON v'+cfg.version+' / '+floors+'F / '+lod+' / '+(lights?'lit':'unlit')}}
+ requestAnimationFrame(frame);
+}catch(error){el('error').textContent='B03表示エラー: '+error.message;console.error(error)}
+</script></body></html>
