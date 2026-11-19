@@ -1,0 +1,166 @@
+{
+  "format": "block_breaker_building_design",
+  "version": 1,
+  "id": "B03",
+  "name": "集合住宅",
+  "description": "Shared visual design sheet for the apartment-style B03 building.",
+  "geometry": {
+    "default_width": 3,
+    "default_height": 1.5,
+    "floor_height": 1.104,
+    "default_depth": 2.5,
+    "chamfer": 0.1,
+    "floors": 3
+  },
+  "roof": {
+    "type": "flat_slab",
+    "thickness": 0.114,
+    "overhang": 0.102
+  },
+  "facade": {
+    "base_color": [
+      0.9,
+      0.89,
+      0.85
+    ],
+    "side_color": [
+      0.76,
+      0.75,
+      0.71
+    ],
+    "top_color": [
+      0.91,
+      0.9,
+      0.87
+    ],
+    "foundation_color": [
+      0.2,
+      0.22,
+      0.23
+    ],
+    "floor_band_color": [
+      0.52,
+      0.53,
+      0.51
+    ],
+    "balcony_color": [
+      0.46,
+      0.47,
+      0.45
+    ],
+    "balcony_rail_color": [
+      0.43,
+      0.45,
+      0.45
+    ]
+  },
+  "entrance": {
+    "enabled": true,
+    "width_ratio": 0.3,
+    "height_ratio": 0.76,
+    "door_color": [
+      0.18,
+      0.2,
+      0.21
+    ],
+    "door_highlight": [
+      0.34,
+      0.36,
+      0.37
+    ],
+    "frame_color": [
+      0.12,
+      0.14,
+      0.16
+    ],
+    "canopy_color": [
+      0.16,
+      0.18,
+      0.2
+    ],
+    "canopy_width_ratio": 1.48,
+    "canopy_height": 0.13,
+    "canopy_depth": 0.16
+  },
+  "windows": {
+    "glow_base": 0.22,
+    "glow_distance_boost": 0.68,
+    "glow_progress_boost": 0.78,
+    "glow_max": 1,
+    "front_count": 3,
+    "width_ratio": 0.122,
+    "height_ratio": 0.31,
+    "y_ratio": 0.58,
+    "side_width_ratio": 0.82,
+    "side_height_ratio": 0.98,
+    "frame_color": [
+      0.3,
+      0.32,
+      0.32
+    ],
+    "glass_color": [
+      1,
+      0.82,
+      0.48
+    ],
+    "side_glass_color": [
+      0.07,
+      0.13,
+      0.21
+    ]
+  },
+  "balcony": {
+    "enabled": true,
+    "slab_height": 0.11,
+    "rail_height": 0.28,
+    "depth": 0.2,
+    "rail_color": [
+      0.43,
+      0.45,
+      0.45
+    ],
+    "floor_band_height": 0.075
+  },
+  "steps": {
+    "enabled": true,
+    "count": 2,
+    "depth": 0.07,
+    "height": 0.055
+  },
+  "damage": {
+    "sink_min": 0,
+    "sink_default": 0.16,
+    "sink_max": 0.35,
+    "profiles": {
+      "normal": {
+        "mode": "normal"
+      },
+      "partial": {
+        "mode": "partial",
+        "anchor": "left",
+        "floor_start": 1,
+        "sink": 0.16,
+        "tilt": 0.07,
+        "missing_ratio": 0.35,
+        "debris": false
+      }
+    }
+  },
+  "atmosphere": {
+    "strength_default": 0.65,
+    "start": 7,
+    "end": 28
+  },
+  "detail_cost": {
+    "body_faces": 6,
+    "foundation_faces": 1,
+    "window_path": 1,
+    "balcony_path": 2,
+    "entrance_faces": 4,
+    "roof_faces": 5
+  },
+  "decor": {
+    "slots": []
+  },
+  "construction": "building"
+}
