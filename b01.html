@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>B01 Building Viewer | Block Breaker Web</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10192b;color:#f3f6ff;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+canvas{display:block;touch-action:none}
+#hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:12px;right:12px;padding:11px 13px;background:#0a1425e8;border:1px solid #566580aa;border-radius:12px;pointer-events:none;font-size:12px;line-height:1.6}
+#hud strong{font-size:15px}
+#tools{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:8px;right:8px;display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+button,a.action{border:1px solid #778aa8;background:#1c3251;color:white;border-radius:11px;padding:11px 10px;font-size:12px;text-decoration:none;font-weight:600}
+#error{position:fixed;top:45%;left:15px;right:15px;color:#ffcccc;text-align:center;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="hud"><strong>B01 / 建物ビューワ</strong><div id="stats">JSONを読み込み中...</div><div id="detail">元データ: building_defs/B01.json</div><div>1本指: 回転 / 2本指: ズーム</div></div>
+<div id="error"></div>
+<div id="tools">
+<button id="floors">1階</button><button id="lod">FULL</button><button id="quantity">1棟</button><button id="lights">窓: 点灯</button><button id="reset">視点リセット</button><a class="action" href="./b03.html">B03へ</a><a class="action" href="./b04.html">B04へ</a><a class="action" href="./">旧テスト</a>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+const $=id=>document.getElementById(id);
+try{
+ const response=await fetch('./data/B01.json',{cache:'no-store'});
+ if(!response.ok)throw new Error('B01.json HTTP '+response.status);
+ const design=await response.json();
+ if(design.format!=='block_breaker_building_design'||design.id!=='B01'||design.version!==1)throw new Error('未対応の建物JSON形式');
+ const g=design.geometry,r=design.roof,fac=design.facade,win=design.windows,ent=design.entrance;
+ const w=g.default_width,h=g.default_height,d=g.default_depth,flh=g.floor_height;
+ const scene=new THREE.Scene();scene.background=new THREE.Color(0x152238);scene.fog=new THREE.FogExp2(0x152238,.012);
+ const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,300);
+ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+ renderer.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(renderer.domElement);
+ scene.add(new THREE.HemisphereLight(0xc4d7ff,0x20222b,2.0));
+ const sun=new THREE.DirectionalLight(0xffe4c2,2.2);sun.position.set(-9,16,-12);scene.add(sun);
+ const ground=new THREE.Mesh(new THREE.PlaneGeometry(180,180),new THREE.MeshStandardMaterial({color:0x2b3647,roughness:1}));
+ ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
+ const grid=new THREE.GridHelper(180,60,0x46516a,0x303b53);grid.position.y=-.03;scene.add(grid);
+ const cube=new THREE.BoxGeometry(1,1,1),plane=new THREE.PlaneGeometry(1,1);
+ // B01 clipped front corners: one shared geometry, still instanced for every building.
+ const chamfer=Math.max(0,Math.min(g.chamfer/w,.14));
+ const shellShape=new THREE.Shape();
+ const corners=[[-.5+chamfer,-.5],[.5-chamfer,-.5],[.5,-.5+chamfer],[.5,.5-chamfer],[.5-chamfer,.5],[-.5+chamfer,.5],[-.5,.5-chamfer],[-.5,-.5+chamfer]];
+ corners.forEach(([x,y],i)=>i?shellShape.lineTo(x,y):shellShape.moveTo(x,y));
+ shellShape.closePath();
+ const shellGeo=new THREE.ExtrudeGeometry(shellShape,{depth:1,bevelEnabled:false,steps:1,curveSegments:1});
+ shellGeo.translate(0,0,-.5);
+ shellGeo.computeVertexNormals();
+ // Procedural transparent textures are generated once, not per window/building.
+ function texture(draw){
+   const cv=document.createElement('canvas');cv.width=cv.height=64;
+   const ctx=cv.getContext('2d');draw(ctx,64);
+   const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;return tex;
+ }
+ const insetMap=texture((ctx,s)=>{
+   ctx.clearRect(0,0,s,s);
+   // Shadow gradients remain translucent and tinted warm rather than black.
+   const top=ctx.createLinearGradient(0,0,0,s);
+   top.addColorStop(0,'rgba(75,55,37,.55)');
+   top.addColorStop(.2,'rgba(105,81,54,.16)');
+   top.addColorStop(.4,'rgba(105,81,54,0)');
+   ctx.fillStyle=top;ctx.fillRect(0,0,s,s);
+   const right=ctx.createLinearGradient(0,0,s,0);
+   right.addColorStop(0,'rgba(105,81,54,0)');
+   right.addColorStop(.75,'rgba(105,81,54,0)');
+   right.addColorStop(1,'rgba(75,55,37,.45)');
+   ctx.fillStyle=right;ctx.fillRect(0,0,s,s);
+ });
+ const glowMap=texture((ctx,s)=>{
+   ctx.clearRect(0,0,s,s);
+   const grad=ctx.createRadialGradient(s/2,s/2,3,s/2,s/2,s*.49);
+   grad.addColorStop(0,'rgba(255,221,155,.35)');
+   grad.addColorStop(.42,'rgba(255,208,132,.22)');
+   grad.addColorStop(1,'rgba(255,180,100,0)');
+   ctx.fillStyle=grad;ctx.fillRect(0,0,s,s);
+ });
+ const matWall=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.85,metalness:.06});
+ const matRoof=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.78,metalness:.05});
+ const matRib=new THREE.MeshBasicMaterial({color:0xffffff});
+ const matDoor=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,side:THREE.DoubleSide});
+ const matGlass=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide});
+ const matInset=new THREE.MeshBasicMaterial({map:insetMap,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1});
+ const matGlow=new THREE.MeshBasicMaterial({map:glowMap,transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,opacity:.85});
+ const material={wall:matWall,roof:matRoof,rib:matRib,door:matDoor,glass:matGlass,inset:matInset,glow:matGlow};
+ const geometry={wall:shellGeo,roof:cube,rib:cube,door:plane,glass:plane,inset:plane,glow:plane};
+ let meshes=[],floorCount=1,lod='full',quantity=1,light=true,az=Math.PI+.48,polar=1.05,radius=10;
+ const target=new THREE.Vector3(0,1.0,0);const helper=new THREE.Object3D();
+ function color(rgb,factor=1){return new THREE.Color().setRGB(Math.min(1,rgb[0]*factor),Math.min(1,rgb[1]*factor),Math.min(1,rgb[2]*factor),THREE.LinearSRGBColorSpace)}
+ function moveCamera(){camera.position.set(target.x+radius*Math.sin(polar)*Math.sin(az),target.y+radius*Math.cos(polar),target.z+radius*Math.sin(polar)*Math.cos(az));camera.lookAt(target)}
+ function add(groups,type,x,y,z,sx,sy,sz,hex,rotX=0,rotY=0){
+  groups[type].push({x,y,z,sx,sy,sz,hex,rotX,rotY});
+ }
+ const front=fac.base_color;
+ function house(groups,x,z,seed){
+  const total=floorCount===1?h:flh*2,baseZ=z-d/2;
+  // The semantic B01 dimensions, color and roof slope come from the original JSON.
+  add(groups,'wall',x,total/2,z,w,total,d,color(front,fac.front_brightness).getHex());
+  // A shallow darker front plinth, as in the Pythonista drawing recipe.
+  add(groups,'wall',x,.035,baseZ-.016,w,.07,.025,color(front,.48).getHex());
+  const roofAngle=-Math.atan2(r.slope,d+2*r.overhang);
+  add(groups,'roof',x,total+r.thickness/2+r.slope/2,z,w+2*r.overhang,r.thickness,d+2*r.overhang,color(front,1.05).getHex(),roofAngle);
+  // Roof front lip.
+  add(groups,'roof',x,total+r.thickness/2,z-d/2-r.overhang,w+2*r.overhang,r.thickness,.025,color(front,.80).getHex());
+  if(floorCount===2){
+   add(groups,'wall',x,flh,z-d/2-.025,w+.05,.06,.04,color(front,.62).getHex());
+  }
+  if(lod==='silhouette')return;
+  const doorW=Math.max(ent.min_width,Math.min(ent.max_width,w*ent.width_ratio));
+  const doorH=Math.max(ent.min_height,Math.min(ent.max_height,(floorCount===1?h:flh)*ent.height_ratio));
+  // A subtle dark recess and warm door make the front entrance read in 3D.
+  add(groups,'door',x,.02+doorH/2,baseZ-.034,doorW+.075,doorH+.055,1,0x303238,0,Math.PI);
+  add(groups,'door',x,.02+doorH/2,baseZ-.040,doorW,doorH,1,0xe5dab8,0,Math.PI);
+  const canopyW=doorW*1.38;
+  add(groups,'roof',x,.02+doorH*.95,baseZ-.072,canopyW,.075,.13,0x609fbd);
+  if(design.steps?.enabled){
+    const stepD=design.steps.depth||.14,stepH=design.steps.height||.04;
+    add(groups,'roof',x,stepH/2,baseZ-.04-stepD/2,doorW*1.16,stepH,stepD,0x84877f);
+  }
+  let windowIndex=0;
+  function windowAt(xx,yy,zz,sw,sh,side=false){
+   const lit=light&&((seed*37+windowIndex++*19)%10)<Math.round((win.lit_ratio_light??.72)*10);
+   const facing=side?Math.PI/2:Math.PI;
+   // The shade and glass use the same facade plane; offset toward the camera.
+   const toward=side?1:-1;
+   const gx=side?xx+.003:xx,gz=side?zz:zz-.003;
+   add(groups,'glass',xx,yy,zz,sw,sh,1,side?0x233b52:(lit?0xf1dfaa:0x354953),0,facing);
+   if(lod==='full'&&!side){
+     add(groups,'inset',gx,yy,gz,sw,sh,1,0xffffff,0,facing);
+     if(lit){
+       // One additive pass shared by all lit windows; no bloom post-processing.
+       add(groups,'glow',xx,yy,zz+toward*.018,sw*1.8,sh*1.8,1,0xffe7b4,0,facing);
+     }
+   }
+  }
+  const ww=Math.max(.20,Math.min(.75,w*win.width_ratio));
+  const wh=Math.max(.18,Math.min(.55,(floorCount===1?h:flh)*win.height_ratio));
+  if(floorCount===1){
+    windowAt(x-w*.3,Math.max(.65,h*win.y_ratio),baseZ-.04,ww,wh);
+    windowAt(x+w*.3,Math.max(.65,h*win.y_ratio),baseZ-.04,ww,wh);
+  }else{
+    // The Pythonista 2F layout has one ground-floor window and three upper windows.
+    windowAt(x+w*.26,flh*.52,baseZ-.04,ww,wh);
+    for(let i=0;i<3;i++)windowAt(x+(i-1)*w*.29,flh+flh*win.y_ratio,baseZ-.04,ww*.9,wh*.92);
+  }
+  if(lod==='full'){
+   windowAt(x+w/2+.035,(floorCount===1?h:flh)*.63,z,.34,.32,true);
+   const ribCount=Math.max(6,Math.round(w/fac.corrugation_spacing));
+   for(let i=1;i<ribCount;i++){
+     const rx=x-w/2+w*i/ribCount;
+     add(groups,'rib',rx,total/2,baseZ-.019,.013,total-.1,.015,color(front,.35).getHex());
+   }
+   const roofRibCount=Math.max(7,Math.round(w/fac.corrugation_spacing));
+   for(let i=1;i<roofRibCount;i++){
+     const rx=x-(w/2+r.overhang)+(w+2*r.overhang)*i/roofRibCount;
+     add(groups,'rib',rx,total+r.thickness+r.slope/2+.012,z,.012,.014,d+2*r.overhang,color(front,.42).getHex(),roofAngle);
+   }
+  }
+ }
+ function rebuild(){
+   for(const mesh of meshes){scene.remove(mesh);mesh.dispose()}meshes=[];
+   const groups={wall:[],roof:[],rib:[],door:[],glass:[],inset:[],glow:[]};
+   const side=Math.ceil(Math.sqrt(quantity));
+   for(let i=0;i<quantity;i++){
+     const row=Math.floor(i/side),col=i%side;
+     house(groups,(col-(side-1)/2)*4.5,(row-(side-1)/2)*4.0,i);
+   }
+   for(const type of Object.keys(groups)){
+     const entries=groups[type];if(!entries.length)continue;
+     const mesh=new THREE.InstancedMesh(geometry[type],material[type],entries.length);
+     mesh.frustumCulled=false;
+     if(type==='inset'||type==='glow')mesh.renderOrder=type==='inset'?2:3;
+     entries.forEach((e,i)=>{
+       helper.position.set(e.x,e.y,e.z);helper.scale.set(e.sx,e.sy,e.sz);helper.rotation.set(e.rotX,e.rotY,0);
+       helper.updateMatrix();mesh.setMatrixAt(i,helper.matrix);mesh.setColorAt(i,new THREE.Color(e.hex));
+     });
+     mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;
+     scene.add(mesh);meshes.push(mesh);
+   }
+   $('floors').textContent=floorCount+'階';$('lod').textContent=lod.toUpperCase();
+   $('quantity').textContent=quantity+'棟';$('lights').textContent='窓: '+(light?'点灯':'消灯');
+ }
+ function reset(){az=Math.PI+.48;polar=1.05;radius=quantity===1?10:50;target.y=floorCount===1?1:1.6;moveCamera()}
+ $('floors').onclick=()=>{floorCount=floorCount===1?2:1;rebuild();reset()};
+ $('lod').onclick=()=>{lod=lod==='full'?'light':lod==='light'?'silhouette':'full';rebuild()};
+ $('quantity').onclick=()=>{quantity=quantity===1?100:1;rebuild();reset()};
+ $('lights').onclick=()=>{light=!light;rebuild()};
+ $('reset').onclick=reset;
+ const pointers=new Map();let prevDistance=0;
+ renderer.domElement.addEventListener('pointerdown',e=>{renderer.domElement.setPointerCapture(e.pointerId);pointers.set(e.pointerId,[e.clientX,e.clientY]);prevDistance=0});
+ renderer.domElement.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;const previous=pointers.get(e.pointerId);
+  if(pointers.size===1){az-=(e.clientX-previous[0])*.008;polar=Math.max(.2,Math.min(1.48,polar+(e.clientY-previous[1])*.008))}
+  pointers.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pointers.size===2){
+   const p=[...pointers.values()],dist=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);
+   if(prevDistance)radius=Math.max(4,Math.min(160,radius*prevDistance/dist));prevDistance=dist;
+  }
+  moveCamera();
+ });
+ const end=e=>{pointers.delete(e.pointerId);prevDistance=0};
+ renderer.domElement.addEventListener('pointerup',end);renderer.domElement.addEventListener('pointercancel',end);
+ window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+ rebuild();reset();
+ let last=performance.now(),frames=0,fps=0;
+ function frame(now){requestAnimationFrame(frame);renderer.render(scene,camera);frames++;
+  if(now-last>700){fps=Math.round(frames*1000/(now-last));frames=0;last=now;
+   $('stats').textContent=fps+' FPS / '+quantity+' buildings / '+renderer.info.render.calls+' draw calls';
+   $('detail').textContent='B01 v'+design.version+' / '+lod+' / '+floorCount+'F / '+(light?'lit':'unlit');
+  }
+ }requestAnimationFrame(frame);
+}catch(err){$('error').textContent='B01表示エラー: '+err.message;console.error(err)}
+</script>
+</body>
+</html>

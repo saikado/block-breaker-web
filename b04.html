@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>B04 Glass Tower | Block Breaker Web</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#101b2e;color:#f2f5ff;font:13px -apple-system,BlinkMacSystemFont,sans-serif}canvas{display:block;touch-action:none}
+#hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:12px;right:12px;padding:10px 13px;background:#0a1425e8;border:1px solid #6579949c;border-radius:12px;pointer-events:none;line-height:1.6}
+#hud strong{font-size:15px}
+#controls{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:8px;right:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
+button,a.nav{border:1px solid #8095b4;color:#fff;background:#19314f;border-radius:11px;padding:11px 10px;font:600 12px -apple-system,BlinkMacSystemFont,sans-serif;text-decoration:none}
+#error{position:fixed;top:43%;left:15px;right:15px;color:#ffc3c3;text-align:center;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="hud"><strong>B04 / ガラス高層ビル</strong><div id="stats">JSON読み込み中...</div><div id="revision">B04 初期移植 v1 / JSON</div><div>1本指: 回転 / 2本指: ズーム</div></div>
+<div id="error"></div>
+<div id="controls">
+<button id="floors">6階</button><button id="lod">FULL</button><button id="qty">1棟</button><button id="light">窓: 点灯</button><button id="reset">視点リセット</button>
+<a class="nav" href="./b01.html">B01</a><a class="nav" href="./b03.html">B03</a>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+const $=id=>document.getElementById(id);
+try {
+ const res=await fetch('./data/B04.json',{cache:'no-store'});
+ if(!res.ok)throw Error('B04.json HTTP '+res.status);
+ const cfg=await res.json();
+ if(cfg.format!=='block_breaker_building_design'||cfg.id!=='B04'||cfg.version!==1)throw Error('B04 JSONの形式が不正');
+ const G=cfg.geometry,F=cfg.facade,W=cfg.windows,R=cfg.roof,E=cfg.entrance,RD=cfg.roof_detail;
+ const width=G.default_width,depth=G.default_depth,fh=G.floor_height;
+ let floors=G.floors,lod='full',qty=1,lights=true;
+ const scene=new THREE.Scene();
+ scene.background=new THREE.Color(0x101e34);scene.fog=new THREE.FogExp2(0x101e34,.010);
+ const camera=new THREE.PerspectiveCamera(49,innerWidth/innerHeight,.1,450);
+ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+ renderer.setPixelRatio(Math.min(2,devicePixelRatio));renderer.setSize(innerWidth,innerHeight);
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ document.body.appendChild(renderer.domElement);
+ scene.add(new THREE.HemisphereLight(0xc1deff,0x182a3c,1.65));
+ const sun=new THREE.DirectionalLight(0xcce3ff,1.7);sun.position.set(-11,19,-12);scene.add(sun);
+ const ground=new THREE.Mesh(new THREE.PlaneGeometry(220,220),new THREE.MeshStandardMaterial({color:0x23354b,roughness:1}));
+ ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
+ const grid=new THREE.GridHelper(220,55,0x344e66,0x293b53);grid.position.y=-.034;scene.add(grid);
+ const cube=new THREE.BoxGeometry(1,1,1),plane=new THREE.PlaneGeometry(1,1);
+ // Chamfered 8-corner front silhouette using one shared extruded mesh.
+ const chamfer=Math.max(0,Math.min(G.chamfer/width,.12));
+ const path=new THREE.Shape();
+ [[-.5+chamfer,-.5],[.5-chamfer,-.5],[.5,-.5+chamfer],[.5,.5-chamfer],[.5-chamfer,.5],[-.5+chamfer,.5],[-.5,-.5+chamfer]].forEach(([x,y],i)=>i?path.lineTo(x,y):path.moveTo(x,y));
+ path.closePath();
+ const shell=new THREE.ExtrudeGeometry(path,{depth:1,bevelEnabled:false,steps:1});shell.translate(0,0,-.5);shell.computeVertexNormals();
+ function texture(paint){
+  const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d');paint(ctx);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+ }
+ const halo=texture(ctx=>{
+  const a=ctx.createRadialGradient(32,32,2,32,32,31);
+  a.addColorStop(0,'rgba(200,239,255,.33)');a.addColorStop(.40,'rgba(150,216,255,.18)');a.addColorStop(1,'rgba(105,183,255,0)');
+  ctx.fillStyle=a;ctx.fillRect(0,0,64,64);
+ });
+ const mat={
+  body:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.67,metalness:.16}),
+  trim:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.70,metalness:.10}),
+  glass:new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide}),
+  line:new THREE.MeshBasicMaterial({color:0xffffff}),
+  glow:new THREE.MeshBasicMaterial({map:halo,side:THREE.DoubleSide,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.65})
+ };
+ const geometries={body:shell,trim:cube,glass:plane,line:cube,glow:plane};
+ const rawColor=(rgb)=>new THREE.Color().setRGB(rgb[0],rgb[1],rgb[2],THREE.LinearSRGBColorSpace).getHex();
+ const col={body:rawColor(F.base_color),side:rawColor(F.side_color),roof:rawColor(F.top_color),foundation:rawColor(F.foundation_color),glass:rawColor(F.glass_color),lit:rawColor(F.light_band_color),line:rawColor(F.vertical_line_color),door:rawColor(E.color)};
+ const temp=new THREE.Object3D(),target=new THREE.Vector3(0,floors*fh*.53,0);let az=Math.PI+.48,polar=1.08,radius=15,meshes=[];
+ const empty=()=>({body:[],trim:[],glass:[],line:[],glow:[]});
+ const add=(b,type,x,y,z,sx,sy,sz,tint,ry=0)=>b[type].push([x,y,z,sx,sy,sz,tint,ry]);
+ function build(bucket,x,z,seed){
+  const H=floors*fh,front=z-depth/2;
+  add(bucket,'body',x,H/2,z,width,H,depth,col.body);
+  add(bucket,'trim',x,.045,front-.016,width,.09,.04,col.foundation);
+  // Roof cap + raised parapet, from the original B04 design sheet.
+  const rw=width+R.overhang*2,rd=depth+R.overhang*2,yRoof=H+R.thickness/2;
+  add(bucket,'trim',x,yRoof,z,rw,R.thickness,rd,col.roof);
+  add(bucket,'trim',x,H+R.thickness+R.parapet_height/2,front-R.overhang,rw,R.parapet_height,.055,col.side);
+  add(bucket,'trim',x,H+R.thickness+R.parapet_height/2,z+depth/2+R.overhang,rw,R.parapet_height,.055,col.side);
+  add(bucket,'trim',x-rw/2,H+R.thickness+R.parapet_height/2,z,.055,R.parapet_height,rd,col.side);
+  add(bucket,'trim',x+rw/2,H+R.thickness+R.parapet_height/2,z,.055,R.parapet_height,rd,col.side);
+  if(lod==='full'){
+   add(bucket,'trim',x,H+R.thickness+R.parapet_height+RD.equipment_height/2,z,RD.equipment_width,RD.equipment_height,RD.equipment_depth,col.foundation);
+  }
+  if(lod==='silhouette')return;
+  // Floor-height glass bands span nearly the entire facade, like the Pythonista renderer.
+  const bandHeight=fh*W.band_height_ratio,bandOffset=fh*W.band_y_ratio;
+  const count=W.vertical_count,facadeWidth=width*.98;
+  for(let floor=0;floor<floors;floor++){
+   const y=floor*fh+bandOffset;
+   // Deterministic illuminated floors, no RNG/flicker.
+   const lit=lights&&((seed*17+floor*11)%7!==0);
+   const glassZ=front-.024,glassColor=lit?col.lit:col.glass;
+   add(bucket,'glass',x,y,glassZ,facadeWidth,bandHeight,1,glassColor,Math.PI);
+   if(lod==='full'&&lit){
+    add(bucket,'glow',x,y,glassZ-.015,facadeWidth*1.045,bandHeight*1.3,1,0xa7dfff,Math.PI);
+   }
+   // Continuous horizontal mullion centered across the glass band.
+   add(bucket,'line',x,y,front-.044,facadeWidth,.026,.018,col.body);
+   if(lod==='full'){
+    // Side window strips remain intentionally darker than the front.
+    for(let side=0;side<W.side_band_count;side++){
+     const sideY=floor*fh+fh*(side?W.second_band_y_ratio:W.band_y_ratio);
+     add(bucket,'glass',x+width/2+.013,sideY,z,depth*.68,fh*W.side_band_height_ratio,1,col.glass,Math.PI/2);
+    }
+   }
+  }
+  if(lod==='full'){
+   const margin=width*W.vertical_margin;
+   const dx=(width-2*margin)/(count+1);
+   for(let n=1;n<=count;n++){
+    const xx=x-width/2+margin+n*dx;
+    add(bucket,'line',xx,H*.5,front-.054,.012,H-.16,.015,col.line);
+   }
+  }
+  // A subtle entrance recess. Kept visually separate from the band glass.
+  if(E.enabled){
+   const doorW=width*E.width_ratio,doorH=fh*E.height_ratio;
+   add(bucket,'glass',x,.055+doorH/2,front-.061,doorW,doorH,1,col.door,Math.PI);
+   add(bucket,'trim',x,.055+doorH+.03,front-E.canopy_depth*.5,doorW*E.canopy_width_ratio,.065,E.canopy_depth,col.foundation);
+  }
+ }
+ function rebuild(){
+  for(const m of meshes){scene.remove(m);m.dispose()}meshes=[];
+  const b=empty(),side=Math.ceil(Math.sqrt(qty));
+  for(let i=0;i<qty;i++){
+   const row=Math.floor(i/side),column=i%side;
+   build(b,(column-(side-1)/2)*4.3,(row-(side-1)/2)*3.7,i);
+  }
+  for(const [type,instances] of Object.entries(b)){
+   if(!instances.length)continue;
+   const mesh=new THREE.InstancedMesh(geometries[type],mat[type],instances.length);
+   mesh.frustumCulled=false;if(type==='glow')mesh.renderOrder=2;
+   instances.forEach((v,i)=>{
+    const [x,y,z,sx,sy,sz,tint,ry]=v;
+    temp.position.set(x,y,z);temp.rotation.set(0,ry,0);temp.scale.set(sx,sy,sz);temp.updateMatrix();
+    mesh.setMatrixAt(i,temp.matrix);mesh.setColorAt(i,new THREE.Color(tint));
+   });
+   mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;
+   scene.add(mesh);meshes.push(mesh);
+  }
+  $('floors').textContent=floors+'階';$('lod').textContent=lod.toUpperCase();$('qty').textContent=qty+'棟';$('light').textContent='窓: '+(lights?'点灯':'消灯');
+  $('revision').textContent='B04 初期移植 v1 / '+floors+'F / '+lod+' / '+(lights?'lit':'unlit');
+ }
+ function view(){camera.position.set(target.x+radius*Math.sin(polar)*Math.sin(az),target.y+radius*Math.cos(polar),target.z+radius*Math.sin(polar)*Math.cos(az));camera.lookAt(target)}
+ function reset(){az=Math.PI+.48;polar=1.08;radius=qty===1?15:66;target.y=floors*fh*.53;view()}
+ $('floors').onclick=()=>{floors=floors>=cfg.floor_range[1]?cfg.floor_range[0]:floors+1;rebuild();reset()};
+ $('lod').onclick=()=>{lod=lod==='full'?'light':lod==='light'?'silhouette':'full';rebuild()};
+ $('qty').onclick=()=>{qty=qty===1?100:1;rebuild();reset()};
+ $('light').onclick=()=>{lights=!lights;rebuild()};
+ $('reset').onclick=reset;
+ const pointerMap=new Map();let lastPinch=0;
+ renderer.domElement.addEventListener('pointerdown',e=>{
+  renderer.domElement.setPointerCapture(e.pointerId);pointerMap.set(e.pointerId,[e.clientX,e.clientY]);lastPinch=0;
+ });
+ renderer.domElement.addEventListener('pointermove',e=>{
+  if(!pointerMap.has(e.pointerId))return;
+  const prev=pointerMap.get(e.pointerId);
+  if(pointerMap.size===1){
+   az-=(e.clientX-prev[0])*.008;polar=Math.max(.18,Math.min(1.48,polar+(e.clientY-prev[1])*.008));
+  }
+  pointerMap.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pointerMap.size===2){
+   const q=[...pointerMap.values()],dist=Math.hypot(q[0][0]-q[1][0],q[0][1]-q[1][1]);
+   if(lastPinch)radius=Math.max(5,Math.min(210,radius*lastPinch/dist));lastPinch=dist;
+  }view();
+ });
+ function pointerEnd(e){pointerMap.delete(e.pointerId);lastPinch=0}
+ renderer.domElement.addEventListener('pointerup',pointerEnd);
+ renderer.domElement.addEventListener('pointercancel',pointerEnd);
+ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+ rebuild();reset();let frames=0,last=performance.now();
+ function render(now){
+  requestAnimationFrame(render);renderer.render(scene,camera);frames++;
+  if(now-last>750){
+   $('stats').textContent=Math.round(frames*1000/(now-last))+' FPS / '+qty+' buildings / '+renderer.info.render.calls+' draw calls';
+   frames=0;last=now;
+  }
+ }requestAnimationFrame(render);
+}catch(err){$('error').textContent='B04表示エラー: '+err.message;console.error(err)}
+</script>
+</body>
+</html>

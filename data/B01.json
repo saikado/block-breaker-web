@@ -1,0 +1,106 @@
+{
+  "format": "block_breaker_building_design",
+  "version": 1,
+  "id": "B01",
+  "name": "低層住宅",
+  "description": "Shared visual design sheet for the gameplay renderer and geometry viewer.",
+  "geometry": {
+    "default_width": 3,
+    "default_height": 1.5,
+    "default_depth": 2,
+    "chamfer": 0.1,
+    "floor_height": 1.2,
+    "floors": 2
+  },
+  "roof": {
+    "type": "sloped_slab",
+    "thickness": 0.12,
+    "overhang": 0.12,
+    "slope": 0.08
+  },
+  "facade": {
+    "base_color": [
+      0.96,
+      0.58,
+      0.22
+    ],
+    "front_brightness": 1.03,
+    "side_brightness": 0.78,
+    "top_brightness": 0.98,
+    "corrugation_spacing": 0.22
+  },
+  "entrance": {
+    "enabled": true,
+    "width_ratio": 0.17,
+    "height_ratio": 0.58,
+    "min_width": 0.38,
+    "max_width": 0.62,
+    "min_height": 0.58,
+    "max_height": 0.82,
+    "door_width_ratio": 0.17,
+    "door_height_ratio": 0.58
+  },
+  "windows": {
+    "count_single": 2,
+    "width_ratio": 0.19,
+    "height_ratio": 0.27,
+    "y_ratio": 0.52,
+    "glow_alpha": 0.18,
+    "lit_ratio_light": 0.72
+  },
+  "detail_cost": {
+    "body_faces": 6,
+    "foundation_faces": 1,
+    "window_path": 1,
+    "facade_rib_path": 1,
+    "roof_rib_path": 1,
+    "entrance_faces": 2
+  },
+  "decor": {
+    "slots": [
+      {
+        "type": "planter",
+        "priority": 20,
+        "cost": 3,
+        "random": 0.35
+      },
+      {
+        "type": "air_conditioner",
+        "priority": 30,
+        "cost": 2,
+        "random": 0.65
+      }
+    ]
+  },
+  "steps": {
+    "enabled": true,
+    "depth": 0.14,
+    "height": 0.04,
+    "count": 1
+  },
+  "damage": {
+    "sink_min": 0,
+    "sink_default": 0.16,
+    "sink_max": 0.35,
+    "profiles": {
+      "normal": {
+        "mode": "normal"
+      },
+      "partial": {
+        "mode": "partial",
+        "anchor": "left",
+        "floor_start": 1,
+        "sink": 0.16,
+        "tilt": 0.07,
+        "missing_ratio": 0.35,
+        "debris": false
+      }
+    }
+  },
+  "atmosphere": {
+    "strength_default": 0.65,
+    "start": 7,
+    "end": 28
+  },
+  "construction": "building"
+}
