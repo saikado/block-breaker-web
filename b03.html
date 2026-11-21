@@ -90,14 +90,26 @@ try {
     }
    }
   }
-  const doorW=width*ent.width_ratio,doorH=fh*ent.height_ratio,doorY=.03+doorH*.5;
+  const doorW=width*ent.width_ratio*.82,doorH=fh*ent.height_ratio*.88,doorY=.03+doorH*.5;
   if(ent.enabled){
-   add(bucket,'window',x,doorY,front-.026,doorW+.08,doorH+.06,1,C.frame,Math.PI);
-   add(bucket,'window',x,doorY,front-.031,doorW,doorH,1,C.door,Math.PI);
-   add(bucket,'concrete',x,doorH-.015,front-ent.canopy_depth*.5,doorW*ent.canopy_width_ratio,ent.canopy_height,ent.canopy_depth,C.canopy);
+   // A black portal visually masks the solid wall. Keep every overlay in FRONT
+   // of the facade (negative Z), otherwise it would be hidden by the body.
+   const portalW=doorW+.17,portalH=doorH+.095;
+   add(bucket,'window',x,doorY,front-.046,portalW,portalH,1,0x171b20,Math.PI);
+   // Deep charcoal door, inset inside the larger dark opening.
+   add(bucket,'window',x,doorY-.012,front-.052,doorW*.87,doorH*.89,1,0x272c30,Math.PI);
+   // Narrow jambs and lintel give the entrance a dark, recessed frame.
+   const jamb=(portalW-doorW*.87)*.5;
+   add(bucket,'metal',x-portalW*.5+jamb*.5,doorY,front-.064,jamb,portalH,.055,C.frame);
+   add(bucket,'metal',x+portalW*.5-jamb*.5,doorY,front-.064,jamb,portalH,.055,C.frame);
+   add(bucket,'metal',x,doorY+portalH*.5-.035,front-.067,portalW,.07,.055,C.frame);
+   // A modest concrete canopy inspired by Japanese low-rise apartments.
+   const canopyW=doorW*1.22,canopyDepth=ent.canopy_depth*.88;
+   add(bucket,'concrete',x,.03+doorH+.045,front-canopyDepth*.5,canopyW,ent.canopy_height*.72,canopyDepth,C.canopy);
    const steps=cfg.steps;
    if(steps?.enabled)for(let i=0;i<steps.count;i++){
-    add(bucket,'concrete',x,(i+.5)*steps.height,front-.12-i*steps.depth,doorW*ent.canopy_width_ratio*(.88-i*.06),steps.height,steps.depth,C.band);
+    add(bucket,'concrete',x,(i+.5)*steps.height,front-.10-i*steps.depth,
+        canopyW*(.82-i*.07),steps.height,steps.depth,C.band);
    }
   }
   const ww=width*wnd.width_ratio,wh=fh*wnd.height_ratio;
@@ -114,6 +126,8 @@ try {
    if(lod==='light'&&floor===0)continue;
    const yy=floor*fh+fh*wnd.y_ratio;
    for(let col=0;col<wnd.front_count;col++){
+    // Keep the first-floor entrance clear: no central window behind the door.
+    if(floor===0 && ent.enabled && col===Math.floor(wnd.front_count/2))continue;
     const xx=x+(col-(wnd.front_count-1)/2)*width*.275;
     const lit=lights&&((seed*29+floor*17+col*7)%10)<7;
     glass(xx,yy,front-.042,ww,wh,false,lit);
