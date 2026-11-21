@@ -12,7 +12,7 @@ button,a{background:#1a3253;border:1px solid #8396b2;border-radius:11px;color:#f
 </style>
 </head>
 <body>
-<div id="hud"><strong>B03 / 集合住宅ビューワ</strong><div id="stats">B03 JSONを読み込み中...</div><div id="detail">3階 / FULL / 窓点灯</div><div>1本指: 回転 / 2本指: ズーム</div></div>
+<div id="hud"><strong>B03 / 集合住宅ビューワ</strong><div id="stats">B03 JSONを読み込み中...</div><div id="detail">B03 玄関 v2 / 3階 / FULL / 窓点灯</div><div>1本指: 回転 / 2本指: ズーム</div></div>
 <div id="error"></div>
 <div id="buttons"><button id="lod">FULL</button><button id="qty">1棟</button><button id="light">窓: 点灯</button><button id="balcony">ベランダ: ON</button><button id="reset">視点リセット</button><a href="./b01.html">B01へ</a></div>
 <script type="module">
@@ -56,15 +56,16 @@ try {
   concrete:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.89}),
   metal:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.72,metalness:.16}),
   window:new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide}),
+  entrance:new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,depthTest:true}),
   shade:new THREE.MeshBasicMaterial({map:shade,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1}),
   glow:new THREE.MeshBasicMaterial({map:halo,transparent:true,depthWrite:false,opacity:.78,blending:THREE.AdditiveBlending,side:THREE.DoubleSide})
  };
- const geos={body:bodyGeo,concrete:box,metal:box,window:plane,shade:plane,glow:plane};
+ const geos={body:bodyGeo,concrete:box,metal:box,window:plane,entrance:plane,shade:plane,glow:plane};
  const temp=new THREE.Object3D(),target=new THREE.Vector3(0,height*.5,0);
  let meshes=[],quantity=1,lod='full',lights=true,showBalcony=true,az=Math.PI+.48,polar=1.08,radius=11;
  function hex(array){return new THREE.Color().setRGB(...array,THREE.LinearSRGBColorSpace).getHex()}
  const C={wall:hex(f.base_color),roof:hex(f.top_color),edge:hex(f.side_color),foundation:hex(f.foundation_color),band:hex(f.floor_band_color),slab:hex(f.balcony_color),rail:hex(b.rail_color),door:hex(ent.door_color),frame:hex(ent.frame_color),canopy:hex(ent.canopy_color),lit:hex(wnd.glass_color),dark:hex(wnd.side_glass_color)};
- const groups=()=>({body:[],concrete:[],metal:[],window:[],shade:[],glow:[]});
+ const groups=()=>({body:[],concrete:[],metal:[],window:[],entrance:[],shade:[],glow:[]});
  function add(bucket,type,x,y,z,sx,sy,sz,tint,ry=0){bucket[type].push([x,y,z,sx,sy,sz,tint,ry])}
  function build(bucket,x,z,seed){
   const front=z-depth*.5;
@@ -90,25 +91,28 @@ try {
     }
    }
   }
-  const doorW=width*ent.width_ratio*.82,doorH=fh*ent.height_ratio*.88,doorY=.03+doorH*.5;
+  // A smaller, dark Japanese-apartment-style entrance.
+  const doorW=width*ent.width_ratio*.82,doorH=fh*ent.height_ratio*.88;
+  const doorY=.03+doorH*.5;
   if(ent.enabled){
-   // A black portal visually masks the solid wall. Keep every overlay in FRONT
-   // of the facade (negative Z), otherwise it would be hidden by the body.
-   const portalW=doorW+.17,portalH=doorH+.095;
-   add(bucket,'window',x,doorY,front-.046,portalW,portalH,1,0x171b20,Math.PI);
-   // Deep charcoal door, inset inside the larger dark opening.
-   add(bucket,'window',x,doorY-.012,front-.052,doorW*.87,doorH*.89,1,0x272c30,Math.PI);
-   // Narrow jambs and lintel give the entrance a dark, recessed frame.
-   const jamb=(portalW-doorW*.87)*.5;
-   add(bucket,'metal',x-portalW*.5+jamb*.5,doorY,front-.064,jamb,portalH,.055,C.frame);
-   add(bucket,'metal',x+portalW*.5-jamb*.5,doorY,front-.064,jamb,portalH,.055,C.frame);
-   add(bucket,'metal',x,doorY+portalH*.5-.035,front-.067,portalW,.07,.055,C.frame);
-   // A modest concrete canopy inspired by Japanese low-rise apartments.
-   const canopyW=doorW*1.22,canopyDepth=ent.canopy_depth*.88;
-   add(bucket,'concrete',x,.03+doorH+.045,front-canopyDepth*.5,canopyW,ent.canopy_height*.72,canopyDepth,C.canopy);
+   const portalW=doorW+.16,portalH=doorH+.09;
+   // Dedicated entrance instances: draw the portal and doors separately
+   // from the windows, so no lit pane can show inside the entry.
+   add(bucket,'entrance',x,doorY,front-.063,portalW,portalH,1,0x121519,Math.PI);
+   // Two inward-looking matte charcoal sliding door leaves.
+   const leafW=(doorW-.018)*.5;
+   add(bucket,'entrance',x-leafW*.5-.009,doorY-.01,front-.070,leafW,doorH*.9,1,0x252b30,Math.PI);
+   add(bucket,'entrance',x+leafW*.5+.009,doorY-.01,front-.070,leafW,doorH*.9,1,0x292f34,Math.PI);
+   // Recessed jambs, not a bright frame.
+   const frameZ=front-.088,edge=(portalW-doorW)*.5;
+   add(bucket,'metal',x-portalW*.5+edge*.5,doorY,frameZ,edge,portalH,.045,C.frame);
+   add(bucket,'metal',x+portalW*.5-edge*.5,doorY,frameZ,edge,portalH,.045,C.frame);
+   add(bucket,'metal',x,doorY+portalH*.5-.028,frameZ,portalW,.056,.046,C.frame);
+   const canopyW=doorW*1.24,canopyD=ent.canopy_depth*.9;
+   add(bucket,'concrete',x,.03+doorH+.06,front-canopyD*.5,canopyW,ent.canopy_height*.76,canopyD,C.canopy);
    const steps=cfg.steps;
    if(steps?.enabled)for(let i=0;i<steps.count;i++){
-    add(bucket,'concrete',x,(i+.5)*steps.height,front-.10-i*steps.depth,
+    add(bucket,'concrete',x,(i+.5)*steps.height,front-.11-i*steps.depth,
         canopyW*(.82-i*.07),steps.height,steps.depth,C.band);
    }
   }
@@ -148,7 +152,8 @@ try {
   for(const [type,items] of Object.entries(buckets)){
    if(!items.length)continue;
    const mesh=new THREE.InstancedMesh(geos[type],mats[type],items.length);
-   mesh.frustumCulled=false;if(type==='shade'||type==='glow')mesh.renderOrder=type==='shade'?2:3;
+   mesh.frustumCulled=false;if(type==='shade'||type==='glow')mesh.renderOrder=type==='shade'?3:4;
+   if(type==='entrance')mesh.renderOrder=2;
    items.forEach((item,i)=>{
     const [x,y,z,sx,sy,sz,tint,ry]=item;temp.position.set(x,y,z);temp.rotation.set(0,ry,0);temp.scale.set(sx,sy,sz);temp.updateMatrix();
     mesh.setMatrixAt(i,temp.matrix);mesh.setColorAt(i,new THREE.Color(tint));
@@ -181,7 +186,7 @@ try {
  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
  rebuild();reset();let frames=0,last=performance.now();
  function frame(now){requestAnimationFrame(frame);renderer.render(scene,camera);frames++;
-  if(now-last>700){el('stats').textContent=Math.round(frames*1000/(now-last))+' FPS / '+quantity+' buildings / '+renderer.info.render.calls+' draw calls';frames=0;last=now;el('detail').textContent='B03 JSON v'+cfg.version+' / '+floors+'F / '+lod+' / '+(lights?'lit':'unlit')}}
+  if(now-last>700){el('stats').textContent=Math.round(frames*1000/(now-last))+' FPS / '+quantity+' buildings / '+renderer.info.render.calls+' draw calls';frames=0;last=now;el('detail').textContent='B03 玄関v2 / JSON '+cfg.version+' / '+floors+'F / '+lod+' / '+(lights?'lit':'unlit')}}
  requestAnimationFrame(frame);
 }catch(error){el('error').textContent='B03表示エラー: '+error.message;console.error(error)}
 </script></body></html>
