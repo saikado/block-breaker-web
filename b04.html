@@ -14,7 +14,7 @@ button,a.nav{border:1px solid #8095b4;color:#fff;background:#19314f;border-radiu
 </style>
 </head>
 <body>
-<div id="hud"><strong>B04 / ガラス高層ビル</strong><div id="stats">JSON読み込み中...</div><div id="revision">B04 光帯ファサード v2 / JSON</div><div>1本指: 回転 / 2本指: ズーム</div></div>
+<div id="hud"><strong>B04 / ガラス高層ビル</strong><div id="stats">JSON読み込み中...</div><div id="revision">B04 ガラス光帯 v3 / JSON</div><div>1本指: 回転 / 2本指: ズーム</div></div>
 <div id="error"></div>
 <div id="controls">
 <button id="floors">6階</button><button id="lod">FULL</button><button id="qty">1棟</button><button id="light">窓: 点灯</button><button id="reset">視点リセット</button>
@@ -38,8 +38,8 @@ try {
  renderer.setPixelRatio(Math.min(2,devicePixelRatio));renderer.setSize(innerWidth,innerHeight);
  renderer.outputColorSpace=THREE.SRGBColorSpace;
  document.body.appendChild(renderer.domElement);
- scene.add(new THREE.HemisphereLight(0xc1deff,0x182a3c,1.65));
- const sun=new THREE.DirectionalLight(0xcce3ff,1.7);sun.position.set(-11,19,-12);scene.add(sun);
+ scene.add(new THREE.HemisphereLight(0xa5c8ef,0x101b2b,1.35));
+ const sun=new THREE.DirectionalLight(0xb5d9ff,1.25);sun.position.set(-11,19,-12);scene.add(sun);
  const ground=new THREE.Mesh(new THREE.PlaneGeometry(220,220),new THREE.MeshStandardMaterial({color:0x23354b,roughness:1}));
  ground.rotation.x=-Math.PI/2;ground.position.y=-.04;scene.add(ground);
  const grid=new THREE.GridHelper(220,55,0x344e66,0x293b53);grid.position.y=-.034;scene.add(grid);
@@ -59,22 +59,75 @@ try {
   a.addColorStop(0,'rgba(200,239,255,.33)');a.addColorStop(.40,'rgba(150,216,255,.18)');a.addColorStop(1,'rgba(105,183,255,0)');
   ctx.fillStyle=a;ctx.fillRect(0,0,64,64);
  });
+ // Prebaked procedural facade textures: 1 texture per style, shared by all floors.
+ // Bright ceiling -> transparent-looking cyan middle -> deep blue lower glass.
+ function facadeTexture(mode){
+  const cv=document.createElement('canvas');cv.width=512;cv.height=128;
+  const ctx=cv.getContext('2d'),w=cv.width,h=cv.height;
+  const warm=mode==='lobby',dim=mode==='dark';
+  const grad=ctx.createLinearGradient(0,0,0,h);
+  if(warm){
+   grad.addColorStop(0,'#fff0be');grad.addColorStop(.18,'#ffd584');
+   grad.addColorStop(.52,'#c58842');grad.addColorStop(1,'#42302a');
+  }else if(dim){
+   grad.addColorStop(0,'#547c8e');grad.addColorStop(.19,'#244b68');
+   grad.addColorStop(.65,'#16344c');grad.addColorStop(1,'#0d2235');
+  }else{
+   grad.addColorStop(0,'#d7ffff');grad.addColorStop(.13,'#8deaff');
+   grad.addColorStop(.39,'#2b9fda');grad.addColorStop(.71,'#12618e');
+   grad.addColorStop(1,'#092a48');
+  }
+  ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
+  if(!dim){
+   // Repeated ceiling lights and shadowy interior partitions create depth.
+   for(let i=0;i<6;i++){
+    const px=i*w/6;
+    ctx.fillStyle=warm?'rgba(55,41,31,.20)':'rgba(3,28,52,.22)';
+    ctx.fillRect(px+5,h*.28,w/6-10,h*.48);
+    ctx.fillStyle=warm?'rgba(255,246,211,.65)':'rgba(211,253,255,.75)';
+    ctx.fillRect(px+w/18,h*.09,w/12,h*.085);
+    ctx.fillStyle='rgba(8,30,46,.16)';
+    ctx.fillRect(px+w/14,h*.63,w/12,h*.11);
+   }
+  }
+  const ceiling=ctx.createLinearGradient(0,0,0,h*.28);
+  ceiling.addColorStop(0,warm?'rgba(255,248,197,.90)':'rgba(233,255,255,.90)');
+  ceiling.addColorStop(1,'rgba(200,238,255,0)');
+  ctx.fillStyle=ceiling;ctx.fillRect(0,0,w,h*.28);
+  // Thin vertical glass mullions; confined to the window bands.
+  ctx.fillStyle=warm?'rgba(27,39,47,.86)':'rgba(8,33,56,.75)';
+  const columns=warm?5:W.vertical_count+1;
+  for(let i=1;i<columns;i++)ctx.fillRect(Math.round(i*w/columns)-2,0,4,h);
+  ctx.fillStyle=warm?'rgba(25,34,40,.76)':'rgba(7,30,52,.76)';
+  ctx.fillRect(0,h*.69,w,4);
+  ctx.fillRect(0,h-5,w,5);
+  ctx.fillStyle='rgba(255,255,255,.18)';
+  ctx.fillRect(0,h*.04,w,2);
+  const tex=new THREE.CanvasTexture(cv);
+  tex.colorSpace=THREE.SRGBColorSpace;
+  tex.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+  return tex;
+ }
+ const ribbonMap=facadeTexture('lit'),darkRibbonMap=facadeTexture('dark'),lobbyMap=facadeTexture('lobby');
  const mat={
-  body:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.67,metalness:.16}),
-  trim:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.70,metalness:.10}),
-  glass:new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide}),
+  body:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.86,metalness:.10}),
+  trim:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.78,metalness:.10}),
+  spandrel:new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide}),
+  ribbon:new THREE.MeshBasicMaterial({map:ribbonMap,color:0xffffff,side:THREE.DoubleSide,toneMapped:false}),
+  ribbonDark:new THREE.MeshBasicMaterial({map:darkRibbonMap,color:0xffffff,side:THREE.DoubleSide}),
+  lobby:new THREE.MeshBasicMaterial({map:lobbyMap,color:0xffffff,side:THREE.DoubleSide,toneMapped:false}),
   line:new THREE.MeshBasicMaterial({color:0xffffff}),
-  glow:new THREE.MeshBasicMaterial({map:halo,side:THREE.DoubleSide,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.65})
+  glow:new THREE.MeshBasicMaterial({map:halo,side:THREE.DoubleSide,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.27})
  };
- const geometries={body:shell,trim:cube,glass:plane,line:cube,glow:plane};
+ const geometries={body:shell,trim:cube,spandrel:plane,ribbon:plane,ribbonDark:plane,lobby:plane,line:cube,glow:plane};
  const rawColor=(rgb)=>new THREE.Color().setRGB(rgb[0],rgb[1],rgb[2],THREE.LinearSRGBColorSpace).getHex();
  const col={body:rawColor(F.base_color),side:rawColor(F.side_color),roof:rawColor(F.top_color),foundation:rawColor(F.foundation_color),glass:rawColor(F.glass_color),lit:rawColor(F.light_band_color),line:rawColor(F.vertical_line_color),door:rawColor(E.color)};
  const temp=new THREE.Object3D(),target=new THREE.Vector3(0,floors*fh*.53,0);let az=Math.PI+.48,polar=1.08,radius=15,meshes=[];
- const empty=()=>({body:[],trim:[],glass:[],line:[],glow:[]});
+ const empty=()=>({body:[],trim:[],spandrel:[],ribbon:[],ribbonDark:[],lobby:[],line:[],glow:[]});
  const add=(b,type,x,y,z,sx,sy,sz,tint,ry=0)=>b[type].push([x,y,z,sx,sy,sz,tint,ry]);
  function build(bucket,x,z,seed){
   const H=floors*fh,front=z-depth/2;
-  add(bucket,'body',x,H/2,z,width,H,depth,col.body);
+  add(bucket,'body',x,H/2,z,width,H,depth,0x192e40);
   add(bucket,'trim',x,.045,front-.016,width,.09,.04,col.foundation);
   // Roof cap + raised parapet, from the original B04 design sheet.
   const rw=width+R.overhang*2,rd=depth+R.overhang*2,yRoof=H+R.thickness/2;
@@ -87,59 +140,49 @@ try {
    add(bucket,'trim',x,H+R.thickness+R.parapet_height+RD.equipment_height/2,z,RD.equipment_width,RD.equipment_height,RD.equipment_depth,col.foundation);
   }
   if(lod==='silhouette')return;
-  // Reference-inspired facade: bright cyan window ribbons between wide dark panels.
-  const bandH=fh*W.band_height_ratio, bandW=width*.985, count=W.vertical_count;
-  const glassZ=front-.035;
-  // Distinct ground-floor lobby, with warm illumination behind a projecting canopy.
-  const lobbyW=width*.88,lobbyH=fh*.74,lobbyY=.07+lobbyH/2;
-  add(bucket,'trim',x,fh*.51,front-.018,width,fh*.91,.045,col.foundation);
-  add(bucket,'glass',x,lobbyY,front-.071,lobbyW,lobbyH,1,lights?0xffe1a0:col.glass,Math.PI);
-  if(lod==='full'&&lights)add(bucket,'glow',x,lobbyY,front-.096,lobbyW*1.15,lobbyH*1.28,1,0xffb860,Math.PI);
+  // Reference-inspired facade v3: true contrast between opaque spandrels
+  // and textured window ribbons. Original B04 JSON stays unchanged.
+  const bandH=fh*Math.min(W.band_height_ratio,.44),bandW=width*.975;
+  const glassZ=front-.043;
+  // Ground-floor full-width amber lobby (not a narrow single door).
+  const lobbyW=width*.86,lobbyH=fh*.72,lobbyY=.065+lobbyH*.5;
+  add(bucket,'spandrel',x,fh*.47,front-.029,width,fh*.94,1,0x152738,Math.PI);
+  add(bucket,lights?'lobby':'ribbonDark',x,lobbyY,front-.064,lobbyW,lobbyH,1,0xffffff,Math.PI);
+  if(lod==='full'&&lights)
+   add(bucket,'glow',x,lobbyY,front-.088,lobbyW*1.08,lobbyH*1.12,1,0xffbc65,Math.PI);
   if(E.enabled){
+   const canopyW=width*.99,canopyY=fh*.93,canopyDepth=.38;
+   add(bucket,'trim',x,canopyY,front-canopyDepth*.5,canopyW,.075,canopyDepth,0x354b5d);
    if(lod==='full'){
-    for(let i=1;i<5;i++){
-     const xx=x-lobbyW/2+lobbyW*i/5;
-     add(bucket,'line',xx,lobbyY,front-.089,.014,lobbyH,.018,col.line);
-    }
-   }
-   const cw=width*.96,cy=fh*.96;
-   add(bucket,'trim',x,cy,front-.22,cw,.07,.42,col.roof);
-   if(lod==='full'){
-    add(bucket,'line',x-cw*.44,cy/2,front-.42,.045,cy,.045,col.side);
-    add(bucket,'line',x+cw*.44,cy/2,front-.42,.045,cy,.045,col.side);
+    add(bucket,'line',x-canopyW*.45,canopyY*.5,front-canopyDepth+.02,.035,canopyY,.04,0x6d8290);
+    add(bucket,'line',x+canopyW*.45,canopyY*.5,front-canopyDepth+.02,.035,canopyY,.04,0x6d8290);
+    // Three tiny warm downlights under the entrance canopy.
+    for(let i=-1;i<=1;i++)
+     add(bucket,'glow',x+i*canopyW*.28,canopyY-.06,front-canopyDepth-.008,.28,.19,1,0xffb653,Math.PI);
    }
   }
-  // Floor 0 is lobby; upper floors have blue continuous horizontal glass strips.
   for(let floor=1;floor<floors;floor++){
    const y=floor*fh+fh*W.band_y_ratio;
-   const lit=lights&&((seed*17+floor*11)%9!==0);
-   add(bucket,'glass',x,y,glassZ,bandW,bandH,1,lit?0x8de8ff:col.glass,Math.PI);
+   // Continuous opaque navy wall between each adjacent window band.
+   add(bucket,'spandrel',x,floor*fh,front-.031,bandW,fh-bandH+.014,1,0x192c3b,Math.PI);
+   const lit=lights&&((seed*17+floor*11)%13!==0);
+   add(bucket,lit?'ribbon':'ribbonDark',x,y,glassZ,bandW,bandH,1,0xffffff,Math.PI);
    if(lod==='full'&&lit)
-    add(bucket,'glow',x,y,glassZ-.022,bandW*1.07,bandH*1.27,1,0xb4ecff,Math.PI);
-   if(lod==='full'){
-    // Horizontal sill and upper luminous rim.
-    add(bucket,'line',x,y+bandH*.48,glassZ-.040,bandW,.021,.022,lit?0xa5eaff:col.line);
-    add(bucket,'line',x,y-bandH*.48,glassZ-.044,bandW,.027,.022,col.line);
-    add(bucket,'line',x,y-bandH*.12,glassZ-.048,bandW,.018,.020,col.line);
-    // Mullions do not cross opaque walls between window bands.
-    for(let n=1;n<=count;n++){
-     const xx=x-bandW/2+bandW*n/(count+1);
-     add(bucket,'line',xx,y,glassZ-.048,.012,bandH,.022,col.line);
-    }
-   }
-   // Side ribbons wrap around the building corner.
+    add(bucket,'glow',x,y+bandH*.31,glassZ-.020,bandW*1.03,bandH*.48,1,0x4bc9ff,Math.PI);
+   // Cyan glass wraps the corners and continues on both sides.
    for(const side of [-1,1]){
-    const sx=x+side*(width/2+.028);
-    add(bucket,'glass',sx,y,z,depth*.95,bandH,1,lit?0x339dc8:col.glass,Math.PI/2);
-    if(lod==='full'){
-     add(bucket,'line',sx+side*.022,y-bandH*.12,z,.018,.020,depth*.96,col.line);
-     for(let n=1;n<=W.side_band_count+1;n++){
-      const zz=z-depth*.48+depth*.96*n/(W.side_band_count+2);
-      add(bucket,'line',sx+side*.030,y,zz,.020,bandH,.013,col.line);
-     }
-    }
+    const sx=x+side*(width/2+.024);
+    add(bucket,'spandrel',sx,floor*fh,z,depth*.95,fh-bandH+.014,1,0x132635,Math.PI/2);
+    add(bucket,lit?'ribbon':'ribbonDark',sx,y,z,depth*.95,bandH,1,0xffffff,Math.PI/2);
    }
   }
+  // Slim vertical architectural lines on opaque facade (not 7 strong rails).
+  if(lod==='full'){
+   for(const n of [-1,1]){
+    add(bucket,'line',x+n*bandW*.5,H*.5,front-.055,.018,H-.2,.026,0x193447);
+   }
+  }
+
  }
  function rebuild(){
   for(const m of meshes){scene.remove(m);m.dispose()}meshes=[];
@@ -161,7 +204,7 @@ try {
    scene.add(mesh);meshes.push(mesh);
   }
   $('floors').textContent=floors+'階';$('lod').textContent=lod.toUpperCase();$('qty').textContent=qty+'棟';$('light').textContent='窓: '+(lights?'点灯':'消灯');
-  $('revision').textContent='B04 光帯ファサード v2 / '+floors+'F / '+lod+' / '+(lights?'lit':'unlit');
+  $('revision').textContent='B04 ガラス光帯 v3 / '+floors+'F / '+lod+' / '+(lights?'lit':'unlit');
  }
  function view(){camera.position.set(target.x+radius*Math.sin(polar)*Math.sin(az),target.y+radius*Math.cos(polar),target.z+radius*Math.sin(polar)*Math.cos(az));camera.lookAt(target)}
  function reset(){az=Math.PI+.48;polar=1.08;radius=qty===1?15:66;target.y=floors*fh*.53;view()}
