@@ -99,10 +99,8 @@ try {
    // Dedicated entrance instances: draw the portal and doors separately
    // from the windows, so no lit pane can show inside the entry.
    add(bucket,'entrance',x,doorY,front-.063,portalW,portalH,1,0x121519,Math.PI);
-   // Two inward-looking matte charcoal sliding door leaves.
-   const leafW=(doorW-.018)*.5;
-   add(bucket,'entrance',x-leafW*.5-.009,doorY-.01,front-.070,leafW,doorH*.9,1,0x252b30,Math.PI);
-   add(bucket,'entrance',x+leafW*.5+.009,doorY-.01,front-.070,leafW,doorH*.9,1,0x292f34,Math.PI);
+   // One continuous matte charcoal doorway, without a central seam.
+   add(bucket,'entrance',x,doorY-.01,front-.070,doorW*.94,doorH*.9,1,0x252b30,Math.PI);
    // Recessed jambs, not a bright frame.
    const frameZ=front-.088,edge=(portalW-doorW)*.5;
    add(bucket,'metal',x-portalW*.5+edge*.5,doorY,frameZ,edge,portalH,.045,C.frame);
