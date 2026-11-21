@@ -1,0 +1,130 @@
+{
+  "format": "block_breaker_building_design",
+  "version": 1,
+  "id": "B04",
+  "name": "企業ビル",
+  "description": "High-rise glass office tower with illuminated horizontal window bands.",
+  "geometry": {
+    "default_width": 2.8,
+    "default_height": 7.2,
+    "default_depth": 2,
+    "chamfer": 0.06,
+    "floor_height": 1,
+    "floors": 6
+  },
+  "roof": {
+    "type": "flat_parapet",
+    "thickness": 0.1,
+    "overhang": 0.06,
+    "parapet_height": 0.16
+  },
+  "facade": {
+    "base_color": [
+      0.22,
+      0.34,
+      0.42
+    ],
+    "side_color": [
+      0.15,
+      0.24,
+      0.3
+    ],
+    "top_color": [
+      0.28,
+      0.39,
+      0.45
+    ],
+    "foundation_color": [
+      0.1,
+      0.14,
+      0.17
+    ],
+    "glass_color": [
+      0.28,
+      0.52,
+      0.62
+    ],
+    "light_band_color": [
+      0.68,
+      0.88,
+      1
+    ],
+    "vertical_line_color": [
+      0.12,
+      0.2,
+      0.25
+    ]
+  },
+  "entrance": {
+    "enabled": true,
+    "width_ratio": 0.16,
+    "height_ratio": 0.34,
+    "color": [
+      0.06,
+      0.1,
+      0.13
+    ],
+    "canopy_width_ratio": 1.18,
+    "canopy_depth": 0.1
+  },
+  "windows": {
+    "front_columns": 3,
+    "band_height_ratio": 0.55,
+    "band_y_ratio": 0.5,
+    "vertical_count": 7,
+    "vertical_margin": 0.1,
+    "vertical_line_width": 0.55,
+    "side_band_count": 2,
+    "side_band_height_ratio": 0.18,
+    "second_band_y_ratio": 0.68,
+    "horizontal_line_width": 1.8
+  },
+  "roof_detail": {
+    "equipment_width": 0.52,
+    "equipment_depth": 0.34,
+    "equipment_height": 0.18
+  },
+  "damage": {
+    "sink_min": 0,
+    "sink_default": 0.12,
+    "sink_max": 0.3,
+    "profiles": {
+      "normal": {
+        "mode": "normal"
+      },
+      "partial": {
+        "mode": "partial",
+        "anchor": "left",
+        "sink": 0.12,
+        "tilt": 0.04,
+        "missing_ratio": 0.2,
+        "debris": false
+      }
+    }
+  },
+  "atmosphere": {
+    "strength_default": 0.65,
+    "start": 7,
+    "end": 28,
+    "light_band_retention": 0.6
+  },
+  "detail_cost": {
+    "body_faces": 3,
+    "foundation_faces": 1,
+    "roof_faces": 4,
+    "light_band_path": 1,
+    "vertical_line_path": 1,
+    "entrance_faces": 2,
+    "roof_equipment_faces": 1
+  },
+  "decor": {
+    "slots": []
+  },
+  "render_family": "glass_tower",
+  "construction": "stack",
+  "module_id": "B04_FLOOR",
+  "floor_range": [
+    4,
+    7
+  ]
+}
